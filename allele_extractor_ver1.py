@@ -1,3 +1,19 @@
+# Allele Extractor
+# Copyright (C) 2026  Alona Bokovnia
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os
 import argparse
 import cv2
@@ -13,6 +29,8 @@ from pytesseract import Output
 from thefuzz import fuzz
 import time
 import datetime
+
+pytesseract.pytesseract.tesseract_cmd = r".\Tesseract-OCR\tesseract.exe"
 
 LOCUS_LIST = (
     "D3S1358", "D1S1656", "D2S441", "D10S1248", "D13S317", "Penta E", "D16S539", 
@@ -778,7 +796,7 @@ def main():
     else:
         open(log_file, "a", encoding="utf-8")
         processed_files = set()
-    print(processed_files)
+
     all_files = [
         pdf for pdf in pdf_dir.iterdir() if pdf.is_file()
         ]
@@ -787,6 +805,8 @@ def main():
     processed_count = len(processed_files)
 
     for pdf in pdf_dir.glob('*.pdf'):
+
+        shutil.rmtree(Path('.\\temp'), ignore_errors=True)
 
         if pdf.name in processed_files:
             continue
@@ -797,10 +817,9 @@ def main():
             )
 
         start_time = time.perf_counter() # Set timer
-        df_dir = Path('df_dir')
 
         for directory in [split_pdf_dir, img_dir, crop_dir, df_dir]:
-            Path(directory).mkdir(exist_ok=True)
+            Path(directory).mkdir(parents=True, exist_ok=True)
 
         try:
             PDFprocessor(pdf).resize_pdf(f"{pdf_dir}/{pdf.name}")
@@ -900,13 +919,11 @@ def main():
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.datetime.now()}\nError: {pdf.name}\n\n")
 
-        shutil.rmtree(crop_dir)
-        shutil.rmtree(split_pdf_dir)
-        shutil.rmtree(img_dir)
 
-split_pdf_dir = Path('split_pdf_dir')
-img_dir = Path('img_dir')
-crop_dir = Path('crop_dir')
+df_dir = Path('.\\results')
+split_pdf_dir = Path('.\\temp\\split_pdf')
+img_dir = Path('.\\temp\\img')
+crop_dir = Path('.\\temp\\crop')
 
 if __name__ == "__main__":
     try:
@@ -914,13 +931,11 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(
             '\033[31mProcessing was interrupted by the user.\033[0m'
-            )
+            ) 
         
-        shutil.rmtree(crop_dir)
-        shutil.rmtree(split_pdf_dir)
-        shutil.rmtree(img_dir)
+        shutil.rmtree(Path('.\\temp'), ignore_errors=True)
+
     except Exception as e:
         print(f'\033[31mProcessing was interrupted. \nError: {e}\033[0m')
-        shutil.rmtree(crop_dir)
-        shutil.rmtree(split_pdf_dir)
-        shutil.rmtree(img_dir)
+        
+        shutil.rmtree(Path('.\\temp'), ignore_errors=True)
