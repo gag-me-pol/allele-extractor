@@ -52,6 +52,22 @@ Run the script with the bundled Python interpreter, pointing it to a folder cont
 .\python-3.14.6\python.exe .\allele_extractor_ver1.py --input "path\to\folder\with\pdf\files"
 ```
 
+### Parallel processing
+
+By default files are processed one at a time. For large batches, add `--jobs N` to
+process `N` PDFs at once (use up to the number of CPU cores on your machine):
+
+```bash
+.\python-3.14.6\python.exe .\allele_extractor_ver1.py --input "path\to\folder" --jobs 6
+```
+
+Each worker uses its own isolated temp folder, so results are identical to a
+single-threaded run — only faster. Memory use grows roughly linearly with `--jobs`.
+
+Press **Ctrl+C** at any time to stop. Files that already finished stay recorded in
+`processed_files.log`; files still in progress are dropped and picked up again on
+the next run.
+
 ### Output
 
 Results are automatically saved to a new folder named `results`, created in the working directory. Each output Excel file keeps the same name as its corresponding input PDF (with `.xlsx` appended).
