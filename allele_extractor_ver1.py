@@ -696,11 +696,13 @@ class AlleleData:
                             # (int or float)
                             try:
                                 line_int = int(lines[0])
-                                list_lines.append(line_int)
+                                if line_int < 50:
+                                    list_lines.append(line_int)
                             except Exception:
                                 try:
                                     line_flt = float(lines[0])
-                                    list_lines.append(line_flt)
+                                    if line_flt < 50:
+                                        list_lines.append(line_flt)
                                 except Exception as e:
                                     print(f'Problem with dataframe: {e}')
                                     continue
