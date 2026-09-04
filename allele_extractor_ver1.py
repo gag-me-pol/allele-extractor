@@ -55,7 +55,11 @@ _APPROX_EPS_STEPS = np.linspace(0.001, 0.05, 10)
 @lru_cache(maxsize=64)
 def _load_gray(path_str: str):
     """Load an image from disk and convert it to grayscale."""
-    img = cv2.imread(path_str)
+    try:
+        img = cv2.imread(path_str)
+    except Exception as e:
+        print(f"Error loading image {path_str}: {e}")
+        return None
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
@@ -200,7 +204,7 @@ class ImageProcessor:
         """Crop the image to the area defined by the color canals found 
         in the image."""
         gap_threshold = 300  # Color canals are higher than 300 pixels
-        height, width = self.image.shape
+        _height, width = self.image.shape
 
         min_len = width * 0.9  # Lines that are >90% of image width
 
@@ -796,7 +800,10 @@ def _init_worker():
 def _process_one_by_pdf(pdf, results_dir):
     """imap-friendly wrapper: derives the per-file temp folder from the 
     PDF."""
-    return _process_one(pdf, Path('temp') / pdf.stem, results_dir)
+    if not str.isascii(pdf.stem):
+        newname = pdf.stem.encode('ascii', 'ignore').decode()
+    return _process_one(pdf, Path('temp') / newname if 'newname' in locals() 
+                        else Path('temp') / pdf.stem, results_dir)
 
 
 def _process_one(pdf, base_tmp, results_dir):
@@ -823,8 +830,11 @@ def _process_one(pdf, base_tmp, results_dir):
 
     try:
         try:
+            if not str.isascii(pdf.name):
+                newname = pdf.name.encode('ascii', 'ignore').decode()
             # Resize into the temp folder instead of overwriting the input PDF.
-            resized_pdf = base_tmp / f"resized_{pdf.name}"
+            resized_pdf = base_tmp / f"resized_{newname if 'newname' 
+                                                in locals() else pdf.name}"
             PDFprocessor(pdf).resize_pdf(str(resized_pdf))
             PDFprocessor(resized_pdf).split_pdf(split_pdf_dir)
         except Exception as e:
@@ -915,10 +925,6 @@ def _process_one(pdf, base_tmp, results_dir):
 
             no_dopplers.to_excel(f"{results_dir}/{pdf.name}.xlsx")
 
-            print(
-                f'\033[32mFile {pdf.name} was processed in '
-                f'{execution_time:.2f} seconds.\033[0m'
-            )
             return ("success", pdf.name, execution_time, "")
 
         except Exception as e:
@@ -1009,9 +1015,21 @@ def main():
                     f'({processed_count}/{count_files}) '
                     f'Processing file {pdf.name}...'
                 )
-                record(
-                    _process_one(pdf, Path('.\\temp') / pdf.stem, df_dir)
-                )
+                result = _process_one(pdf, Path('.\\temp') / pdf.stem, df_dir)
+                status, name, seconds, message = result
+                if status == "success":
+                    print(
+                        f'\033[32m{pdf.name} processed in '
+                        f'{seconds:.2f} seconds.\033[0m'
+                    )
+                else:
+                    print(
+                        f'\033[31m{pdf.name} failed to process.' 
+                        f' Error: {message}\033[0m'
+                    )
+
+                record(result)
+
         except KeyboardInterrupt:
             interrupted = True
     else:
@@ -1035,8 +1053,17 @@ def main():
                     continue
                 remaining -= 1
                 processed_count += 1
-                status, name, _seconds, _msg = result
-                print(f'({processed_count}/{count_files}) {name} [{status}]')
+                status, name, seconds, _message = result
+                if status == "success":
+                    print(
+                        f'({processed_count}/{count_files}) {name}' 
+                        f'[\033[32m{status}\033[0m] in {seconds:.2f} seconds.'
+                    )
+                else:
+                    print(
+                        f'({processed_count}/{count_files}) {name}' 
+                        f'[\033[31m{status}\033[0m].'
+                    )
                 record(result)
             pool.close()
             pool.join()
