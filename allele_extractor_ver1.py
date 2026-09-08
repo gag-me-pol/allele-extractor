@@ -560,6 +560,47 @@ class AlleleData:
 
         return new_list_of_borders
 
+    def amelogenin_data(self, list_of_borders):
+        """Extract amelogenin data from the image."""
+        data_dict = {}
+        amelogenin_area = self.image[list_of_borders[0]['y_locus']:, :list_of_borders[0]['x1_locus']+100]
+        contours, _ = cv2.findContours(
+            amelogenin_area, cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+        amel_lines = []
+        for cunt in contours:
+            # Reducing the contour to the smallest number of points
+            # (btw contours here are just a certain number of points)
+            perimeter = cv2.arcLength(cunt, True)
+            for eps in _APPROX_EPS_STEPS:
+                approx = cv2.approxPolyDP(cunt, eps * perimeter, True)
+                # If there are 4 points - it's a square
+                if len(approx) == 4:
+                    x, y, w, h = \
+                        cv2.boundingRect(approx)
+                    letter_area = amelogenin_area[y:y+h, x:x+w]
+                    data = pytesseract.image_to_string(
+                        letter_area, config='--psm 6 '
+                        '-c tessedit_char_whitelist=XY'
+                    )
+        
+                    if data:
+                        amel_lines.append(data.strip())
+                        break
+        
+            if "X" in amel_lines and "Y" in amel_lines:
+                break
+        
+        if amel_lines:
+            data_dict['AMEL'] = amel_lines
+
+        df = pd.DataFrame(
+                    dict([(k, pd.Series(v))
+                          for k, v in data_dict.items()])
+                )
+        return df
+
     def allele_contours(self, list_of_borders):
         """Find contours in the image that correspond to allele data and 
         extract the data."""
@@ -867,6 +908,7 @@ def _process_one(pdf, base_tmp, results_dir):
 
         seen = set()
         list_of_df = []
+        amel = False
 
         for crop in crop_dir.glob('*.png'):
             locus_coords_name = []  # Coordinates loci names
@@ -901,6 +943,15 @@ def _process_one(pdf, base_tmp, results_dir):
                             continue
                         else:
                             break
+
+                    if amel is False:
+                        amelogenin_df = (
+                            AlleleData(crop).black_white(180)
+                            .amelogenin_data(new_locus_coords)
+                        )
+                        if amelogenin_df is not None and not amelogenin_df.empty:
+                            list_of_df.append(amelogenin_df)
+                            amel = True
 
                     df = (
                         AlleleData(crop).black_white(180)
