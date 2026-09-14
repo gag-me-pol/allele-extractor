@@ -32,6 +32,9 @@ import datetime
 import signal
 import multiprocessing as mp
 from functools import lru_cache, partial
+import re
+import random
+import string
 
 pytesseract.pytesseract.tesseract_cmd = r".\Tesseract-OCR\tesseract.exe"
 
@@ -842,7 +845,10 @@ def _process_one_by_pdf(pdf, results_dir):
     """imap-friendly wrapper: derives the per-file temp folder from the 
     PDF."""
     if not str.isascii(pdf.stem):
-        newname = pdf.stem.encode('ascii', 'ignore').decode()
+        # Takes non-ASCII and non-word characters and replaces them with random ASCII 
+        # characters
+        character_pool = string.ascii_letters
+        newname = re.sub(r'[^\x00-\x7F]|\W', random.choice(character_pool), pdf.stem)
     return _process_one(pdf, Path('temp') / newname if 'newname' in locals() 
                         else Path('temp') / pdf.stem, results_dir)
 
@@ -871,11 +877,8 @@ def _process_one(pdf, base_tmp, results_dir):
 
     try:
         try:
-            if not str.isascii(pdf.name):
-                newname = pdf.name.encode('ascii', 'ignore').decode()
             # Resize into the temp folder instead of overwriting the input PDF.
-            resized_pdf = base_tmp / f"resized_{newname if 'newname' 
-                                                in locals() else pdf.name}"
+            resized_pdf = base_tmp / f"resized_{pdf.name}"
             PDFprocessor(pdf).resize_pdf(str(resized_pdf))
             PDFprocessor(resized_pdf).split_pdf(split_pdf_dir)
         except Exception as e:
@@ -973,8 +976,9 @@ def _process_one(pdf, base_tmp, results_dir):
             no_dopplers = full_df.loc[
                 :, ~full_df.columns.duplicated()
             ]
+            transposed_df = no_dopplers.transpose()
 
-            no_dopplers.to_excel(f"{results_dir}/{pdf.name}.xlsx")
+            transposed_df.to_excel(f"{results_dir}/{pdf.name}.xlsx")
 
             return ("success", pdf.name, execution_time, "")
 
