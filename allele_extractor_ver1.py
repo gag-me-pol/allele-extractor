@@ -566,7 +566,8 @@ class AlleleData:
     def amelogenin_data(self, list_of_borders):
         """Extract amelogenin data from the image."""
         data_dict = {}
-        amelogenin_area = self.image[list_of_borders[0]['y_locus']:, :list_of_borders[0]['x1_locus']+100]
+        amelogenin_area = self.image[list_of_borders[0]['y_locus']:, 
+                                     :list_of_borders[0]['x1_locus']+100]
         contours, _ = cv2.findContours(
             amelogenin_area, cv2.RETR_EXTERNAL,
             cv2.CHAIN_APPROX_SIMPLE
@@ -596,6 +597,7 @@ class AlleleData:
                 break
         
         if amel_lines:
+            amel_lines.reverse() if len(amel_lines) > 1 else amel_lines
             data_dict['AMEL'] = amel_lines
 
         df = pd.DataFrame(
@@ -755,6 +757,7 @@ class AlleleData:
                                     print(f'Problem with dataframe: {e}')
                                     continue
 
+                    list_lines.sort() if len(list_lines) > 1 else list_lines
                     data_dict[locus['name']] = list_lines
 
         df = pd.DataFrame(
@@ -845,11 +848,12 @@ def _process_one_by_pdf(pdf, results_dir):
     """imap-friendly wrapper: derives the per-file temp folder from the 
     PDF."""
     if not str.isascii(pdf.stem):
-        # Takes non-ASCII and non-word characters and replaces them with random ASCII 
-        # characters
+        # Takes non-ASCII and non-word characters and replaces them with 
+        # random ASCII characters
         character_pool = string.ascii_letters
-        newname = re.sub(r'[^\x00-\x7F]|\W', random.choice(character_pool), pdf.stem)
-    return _process_one(pdf, Path('temp') / newname if 'newname' in locals() 
+        newname = re.sub(r'[^\x00-\x7F]|\W', random.choice(character_pool), 
+                         pdf.stem)
+    return _process_one(pdf, Path('temp') / newname if 'newname' in locals()
                         else Path('temp') / pdf.stem, results_dir)
 
 
@@ -977,7 +981,10 @@ def _process_one(pdf, base_tmp, results_dir):
                 :, ~full_df.columns.duplicated()
             ]
             transposed_df = no_dopplers.transpose()
-
+            transposed_df.index.name = "locus_name"
+            transposed_df.columns = [
+                f"allele_{i+1}" for i in range(transposed_df.shape[1])
+                ]
             transposed_df.to_excel(f"{results_dir}/{pdf.name}.xlsx")
 
             return ("success", pdf.name, execution_time, "")
@@ -1070,7 +1077,21 @@ def main():
                     f'({processed_count}/{count_files}) '
                     f'Processing file {pdf.name}...'
                 )
-                result = _process_one(pdf, Path('.\\temp') / pdf.stem, df_dir)
+
+                if not str.isascii(pdf.stem):
+                        # Takes non-ASCII and non-word characters and replaces 
+                        # them with random ASCII characters
+                        character_pool = string.ascii_letters
+                        newname = re.sub(
+                            r'[^\x00-\x7F]|\W', 
+                            random.choice(character_pool), pdf.stem
+                            )
+                
+                result = _process_one(
+                    pdf, Path('.\\temp') / newname 
+                    if 'newname' in locals() 
+                    else pdf.stem, df_dir
+                    )
                 status, name, seconds, message = result
                 if status == "success":
                     print(
