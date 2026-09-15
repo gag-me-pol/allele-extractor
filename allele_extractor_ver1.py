@@ -598,11 +598,15 @@ class AlleleData:
                         '-c tessedit_char_whitelist=XY'
                     )
         
-                    if data:
-                        amel_lines.append(data.strip())
+                    if 'X' in data:
+                        amel_lines.append('1')
+                    if 'Y' in data:
+                        amel_lines.append('2')
                         break
+                    break
+                break
         
-            if "X" in amel_lines and "Y" in amel_lines:
+            if "1" in amel_lines and "2" in amel_lines:
                 break
         
         if amel_lines:
@@ -766,6 +770,7 @@ class AlleleData:
                                     print(f'Problem with dataframe: {e}')
                                     continue
                     locus_name = None
+                    list_lines = [l*10 for l in list_lines]
                     list_lines.sort() if len(list_lines) > 1 else list_lines
                     for key, value in ALIASES_LOCUS.items():
                         if locus['name'] == key:
@@ -780,7 +785,7 @@ class AlleleData:
                   for k, v in data_dict.items()])
         )
 
-        return df
+        return df.astype('Int64')
 
     def change_border(
             self, border, x_change_bbox, y_change_bbox,
@@ -996,11 +1001,11 @@ def _process_one(pdf, base_tmp, results_dir):
                 :, ~full_df.columns.duplicated()
             ]
             transposed_df = no_dopplers.transpose()
-            transposed_df.index.name = "locus_name"
+            transposed_df.index.name = "Locus"
             transposed_df.columns = [
-                f"allele_{i+1}" for i in range(transposed_df.shape[1])
+                f"AlleleNum_{i+1}" for i in range(transposed_df.shape[1])
                 ]
-            transposed_df.to_excel(f"{results_dir}/{pdf.name}.xlsx")
+            transposed_df.to_csv(f"{results_dir}/{pdf.name}.csv")
 
             return ("success", pdf.name, execution_time, "")
 
