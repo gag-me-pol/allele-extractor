@@ -6,7 +6,7 @@ A Python tool that uses computer vision and OCR to automatically extract alleles
 
 - Automatically detects and extracts allele values for each locus (except Y-indel) from PDF DNA profile reports
 - Batch processes an entire folder of PDF files
-- Outputs results as Excel (`.xlsx`) files, one per input PDF
+- Outputs results as CSV (`.csv`) files, one per input PDF
 - Preserves original file names in the output (also accept non-ASCII characters)
 - Keeps a processing log (`processed_files.log`) and skips files already processed (successfully or with an error) on subsequent runs, so a batch can be safely re-run or resumed
 
@@ -69,7 +69,7 @@ the next run.
 
 ### Output
 
-Results are automatically saved to a new folder named `results`, created in the working directory. Each output Excel file keeps the same name as its corresponding input PDF (with `.xlsx` appended).
+Results are automatically saved to a new folder named `results`, created in the working directory.
 
 Processing progress is recorded in `processed_files.log` (timestamp, success/error status, and processing time per file). Files already listed there are skipped if you run the script again on the same input folder.
 
