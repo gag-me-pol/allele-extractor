@@ -46,10 +46,19 @@ LOCUS_LIST = (
     "DYS448", "DYS389 II", "DYS19", "DYS391", "DYS481", "DYS549", "DYS533",
     "DYS438", "DYS437", "DYS635", "DYS390", "DYS439", "DYS392", "DYS643",
     "DYS393", "DYS458", "DYS385", "DYS456", "YGATAH4", "B_DYS456",
-    "B_DYS389I", "B_DYS390", " B_DYS389II", "G_DYS458", " G_DYS19",
+    "B_DYS389I", "B_DYS390", "B_DYS389II", "G_DYS458", "G_DYS19",
     "G_DYS385", "Y_DYS393", "Y_DYS391", "Y_DYS439", "Y_DYS635", "Y_DYS392",
     "R_Y_GATA_H4", "R_DYS437", "R_DYS438", "R_DYS448"
 )
+
+ALIASES_LOCUS = {
+    "B_DYS456": "DYS456", "B_DYS389I": "DYS389 I", "B_DYS390": "DYS390", 
+    "B_DYS389II": "DYS389 II", "G_DYS458": "DYS458", "G_DYS19": "DYS458",
+    "G_DYS385": "DYS385", "Y_DYS393": "DYS393", "Y_DYS391": "DYS391", 
+    "Y_DYS439": "DYS439", "Y_DYS635": "DYS635", "Y_DYS392": "DYS392",
+    "R_Y_GATA_H4": "YGATAH4", "R_DYS437": "DYS437", "R_DYS438": "DYS438", 
+    "R_DYS448": "DYS448"
+}
 
 # Fixed set of simplification steps used when reducing contours to polygons.
 _APPROX_EPS_STEPS = np.linspace(0.001, 0.05, 10)
@@ -756,9 +765,15 @@ class AlleleData:
                                 except Exception as e:
                                     print(f'Problem with dataframe: {e}')
                                     continue
-
+                    locus_name = None
                     list_lines.sort() if len(list_lines) > 1 else list_lines
-                    data_dict[locus['name']] = list_lines
+                    for key, value in ALIASES_LOCUS.items():
+                        if locus['name'] == key:
+                            locus_name = value
+                            break
+                        else:
+                            locus_name = locus['name']
+                    data_dict[locus_name] = list_lines
 
         df = pd.DataFrame(
             dict([(k, pd.Series(v))
