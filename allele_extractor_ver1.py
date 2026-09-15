@@ -604,7 +604,6 @@ class AlleleData:
                         amel_lines.append('2')
                         break
                     break
-                break
         
             if "1" in amel_lines and "2" in amel_lines:
                 break
