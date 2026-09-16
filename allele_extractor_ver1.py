@@ -52,11 +52,11 @@ LOCUS_LIST = (
 )
 
 ALIASES_LOCUS = {
-    "B_DYS456": "DYS456", "B_DYS389I": "DYS389 I", "B_DYS390": "DYS390", 
+    "B_DYS456": "DYS456", "B_DYS389I": "DYS389 I", "B_DYS390": "DYS390",
     "B_DYS389II": "DYS389 II", "G_DYS458": "DYS458", "G_DYS19": "DYS458",
-    "G_DYS385": "DYS385", "Y_DYS393": "DYS393", "Y_DYS391": "DYS391", 
+    "G_DYS385": "DYS385", "Y_DYS393": "DYS393", "Y_DYS391": "DYS391",
     "Y_DYS439": "DYS439", "Y_DYS635": "DYS635", "Y_DYS392": "DYS392",
-    "R_Y_GATA_H4": "YGATAH4", "R_DYS437": "DYS437", "R_DYS438": "DYS438", 
+    "R_Y_GATA_H4": "YGATAH4", "R_DYS437": "DYS437", "R_DYS438": "DYS438",
     "R_DYS448": "DYS448"
 }
 
@@ -90,7 +90,14 @@ def _rows_with_long_run(mask, min_len):
     # like the original loop, at least one "on" pixel (min_len is always > 0
     # here, since it is a fraction of the image width).
     need = max(min_len, 1)
-    return [int(y) for y in np.nonzero(max_run >= need)[0]]
+    line_rows = [int(y) for y in np.nonzero(max_run >= need)[0]]
+    if line_rows:
+        unique_lines = [line_rows[0]]
+        for i in range(1, len(line_rows)):
+            # Gap more than 5 pixels = different lines
+            if line_rows[i] - unique_lines[-1] > 5:
+                unique_lines.append(line_rows[i])
+    return unique_lines
 
 
 class PDFprocessor:
@@ -100,7 +107,7 @@ class PDFprocessor:
 
     def resize_pdf(self, output_pdf: str) -> None:
         """Resizes a PDF to a standard width of 595 points (A4 width) while
-        maintaining the aspect ratio. The resized PDF is saved to the 
+        maintaining the aspect ratio. The resized PDF is saved to the
         specified output path."""
         reader = PdfReader(self.path)
         writer = PdfWriter()
@@ -143,7 +150,7 @@ class PDFprocessor:
         pdf_to_split.close()
 
     def pdf_to_png(self, output_pdf) -> None:
-        """Converts each page of a PDF to a PNG image and saves them in the 
+        """Converts each page of a PDF to a PNG image and saves them in the
         specified output directory."""
         pdf = fitz.open(self.path)
         for page_num in range(len(pdf)):  # Converts each page of pdf to png
@@ -188,9 +195,9 @@ class ImageProcessor:
         )
 
     def crop_to_outer_lines(self):
-        """Crop the image to the area defined by the largest contour found 
-        in the image. This is useful for removing unnecessary borders or 
-        whitespace around the main content of the image."""  
+        """Crop the image to the area defined by the largest contour found
+        in the image. This is useful for removing unnecessary borders or
+        whitespace around the main content of the image."""
         kernel = np.ones((15, 15), np.uint8)
 
         closed = cv2.morphologyEx(
@@ -213,7 +220,7 @@ class ImageProcessor:
         return self
 
     def crop_color_canals(self, output_png):
-        """Crop the image to the area defined by the color canals found 
+        """Crop the image to the area defined by the color canals found
         in the image."""
         gap_threshold = 300  # Color canals are higher than 300 pixels
         _height, width = self.image.shape
@@ -222,24 +229,24 @@ class ImageProcessor:
 
         # Rows holding a horizontal run of >= min_len "on" pixels
         # (vectorised equivalent of the former per-row scan).
-        line_rows = _rows_with_long_run(self.image > 0, min_len)
+        lines = _rows_with_long_run(self.image > 0, min_len)
 
         # Lines filter
-        if line_rows:
-            unique_lines = [line_rows[0]]
-            for i in range(1, len(line_rows)):
-                # Gap more than 5 pixels = different lines
-                if line_rows[i] - unique_lines[-1] > 5:
-                    unique_lines.append(line_rows[i])
+        # if line_rows:
+        #     unique_lines = [line_rows[0]]
+        #     for i in range(1, len(line_rows)):
+        #         # Gap more than 5 pixels = different lines
+        #         if line_rows[i] - unique_lines[-1] > 5:
+        #             unique_lines.append(line_rows[i])
 
         count = 0
 
         # Coordinates of the found lines and calculation of
         # the distance between them
-        if unique_lines:
-            for i in range(len(unique_lines) - 1):
-                y_top = unique_lines[i]
-                y_bottom = unique_lines[i + 1]
+        if lines:
+            for i in range(len(lines) - 1):
+                y_top = lines[i]
+                y_bottom = lines[i + 1]
                 gap = y_bottom - y_top
 
                 if gap > gap_threshold:
@@ -365,7 +372,7 @@ class ImageProcessor:
         return coord_list
 
     def crop_locus_function(self, locus_coords_name):
-        """Find the coordinates of loci borders in the image based on the 
+        """Find the coordinates of loci borders in the image based on the
         coordinates of the loci names."""
         width_s = self.image.shape[1]
         height_crop = 0
@@ -520,63 +527,72 @@ class AlleleData:
 
     def black_white(self, threshord_arg):
         """Convert the image to binary using a specified threshold value."""
-        _, self.image = cv2.threshold(
+        _, self.bw = cv2.threshold(
             self.image, threshord_arg,
             255, cv2.THRESH_BINARY
         )
 
         return self
 
-    def allele_roi_function(self, list_of_borders):
-        """Find the region of interest (ROI) in the image where allele data
-        is located."""
-        min_gap_threshold = 100
-        max_gap_threshold = 700
-        height, width = self.image.shape
+    def allele_roi_function(self, list_of_borders, amel=False):
+        """Find the ROI (region of interest) and allele data for this image."""
+        _height, width = self.bw.shape
 
         min_len = width * 0.5
 
         # Rows holding a horizontal run of >= min_len "off" pixels
         # (vectorised equivalent of the former per-row scan).
-        line_rows = _rows_with_long_run(self.image < 1, min_len)
+        lines = _rows_with_long_run(self.bw < 1, min_len)
 
-        if line_rows:
-            unique_lines = [line_rows[0]]
-            for i in range(1, len(line_rows)):
-                if line_rows[i] - unique_lines[-1] > 5:
-                    unique_lines.append(line_rows[i])
+        results = []
 
-        y_locus_true = None
+        if not lines:
+            return results
 
-        if unique_lines:
-            for i in range(len(unique_lines) - 1):
-                if unique_lines[i + 1] < height - 10:
-                    y_top = unique_lines[i]
-                    y_bottom = unique_lines[i + 1]
-                    gap = y_bottom - y_top
-
-                    if gap > min_gap_threshold \
-                            and gap < max_gap_threshold:
-
-                        y_locus_true = y_bottom
-
-        new_list_of_borders = []
-        if y_locus_true is not None:
+        # Try candidate lines from the bottom of the image upward.
+        del lines[0] # first line can not be candidate
+        for y_locus_true in reversed(lines):
+            new_list_of_borders = []
             for border in list_of_borders:
-                if border['file_name'] in self.name and y_locus_true:
-                    border['y_locus'] = y_locus_true
-                    new_list_of_borders.append(border)
+                if border['file_name'] in self.name:
+                    # Copy so trying a different line on a later pass
+                    # never leaves a stale y_locus on the shared dict.
+                    border_with_y = dict(border)
+                    border_with_y['y_locus'] = y_locus_true
+                    new_list_of_borders.append(border_with_y)
 
-        if y_locus_true is None:
-            return None
+            if not new_list_of_borders:
+                continue
 
-        return new_list_of_borders
+            df = self.black_white(180).allele_contours(new_list_of_borders)
+
+            if df is None or df.empty:
+                # No usable data between this line and the bottom edge -
+                # try the next line up.
+                continue
+
+            # Found usable allele data - keep it and stop trying earlier
+            # (higher up) lines for this image.
+            results.append(df)
+
+            if amel is False:
+                amelogenin_df = (
+                    self.black_white(180)
+                    .amelogenin_data(new_list_of_borders)
+                )
+                if amelogenin_df is not None and not amelogenin_df.empty:
+                    results.append(amelogenin_df)
+
+            break
+
+        return results
 
     def amelogenin_data(self, list_of_borders):
         """Extract amelogenin data from the image."""
         data_dict = {}
-        amelogenin_area = self.image[list_of_borders[0]['y_locus']:, 
+        amelogenin_area = self.bw[list_of_borders[0]['y_locus']:,
                                      :list_of_borders[0]['x1_locus']+100]
+
         contours, _ = cv2.findContours(
             amelogenin_area, cv2.RETR_EXTERNAL,
             cv2.CHAIN_APPROX_SIMPLE
@@ -597,17 +613,17 @@ class AlleleData:
                         letter_area, config='--psm 6 '
                         '-c tessedit_char_whitelist=XY'
                     )
-        
+
                     if 'X' in data:
                         amel_lines.append('1')
                     if 'Y' in data:
                         amel_lines.append('2')
                         break
                     break
-        
+
             if "1" in amel_lines and "2" in amel_lines:
                 break
-        
+
         if amel_lines:
             amel_lines.reverse() if len(amel_lines) > 1 else amel_lines
             data_dict['AMEL'] = amel_lines
@@ -619,7 +635,7 @@ class AlleleData:
         return df
 
     def allele_contours(self, list_of_borders):
-        """Find contours in the image that correspond to allele data and 
+        """Find contours in the image that correspond to allele data and
         extract the data."""
         data_dict = {}
         seen = set()
@@ -627,11 +643,10 @@ class AlleleData:
         for locus in list_of_borders:
             if locus['file_name'] in self.name:
                 list_lines = []
-                locus_area = self.image[
+                locus_area = self.bw[
                     locus['y_locus']:,
                     locus['x1_locus']:locus['x2_locus']
                 ]
-
                 h_locus = locus_area.shape[0]
 
                 # Finding all of contours in the image
@@ -694,7 +709,7 @@ class AlleleData:
 
                     # Extraction text from choosed boxes
                     for box in filtered_boxes:
-                        allele_roi = self.image[
+                        allele_roi = self.bw[
                             box[1] + locus['y_locus']:box[1] + box[3] +
                             locus['y_locus'], locus['x1_locus'] + box[0]:
                             locus['x1_locus'] + box[0] + box[2]
@@ -737,7 +752,7 @@ class AlleleData:
                             local_right_border = \
                                 right_border - locus['x1_locus']
                             box[2] = local_right_border - box[0]
-                            new_allele_roi = self.image[
+                            new_allele_roi = self.bw[
                                 box[1] + locus['y_locus']:
                                 box[1] + box[3] + locus['y_locus'],
                                 locus['x1_locus'] + box[0]:
@@ -765,8 +780,7 @@ class AlleleData:
                                     line_flt = float(lines[0])
                                     if line_flt < 50:
                                         list_lines.append(line_flt)
-                                except Exception as e:
-                                    print(f'Problem with dataframe: {e}')
+                                except Exception:
                                     continue
                     locus_name = None
                     list_lines = [l*10 for l in list_lines]
@@ -958,34 +972,25 @@ def _process_one(pdf, base_tmp, results_dir):
 
             if locus_coords:
                 try:
-                    new_locus_coords = None
                     for r in range(50, 190, 20):
-                        new_locus_coords = (
+                        dfs = (
                             AlleleData(crop).black_white(r)
-                            .allele_roi_function(locus_coords)
+                            .allele_roi_function(locus_coords, amel)
                         )
 
-                        if new_locus_coords is None:
+                        if not dfs:
+                            # Nothing usable at this threshold - try the
+                            # next one.
                             continue
-                        else:
-                            break
 
-                    if amel is False:
-                        amelogenin_df = (
-                            AlleleData(crop).black_white(180)
-                            .amelogenin_data(new_locus_coords)
-                        )
-                        if amelogenin_df is not None and not amelogenin_df.empty:
-                            list_of_df.append(amelogenin_df)
-                            amel = True
+                        for result_df in dfs:
+                            list_of_df.append(result_df)
+                            if 'AMEL' in result_df.columns:
+                                amel = True
 
-                    df = (
-                        AlleleData(crop).black_white(180)
-                        .allele_contours(new_locus_coords)
-                    )
-
-                    if df is not None and not df.empty:
-                        list_of_df.append(df)
+                        # Data was found for this crop - no need to try
+                        # further thresholds.
+                        break
 
                 except Exception as e:
                     print(f'Problem with data extraction from alleles: {e}')
@@ -1105,7 +1110,7 @@ def main():
                             r'[^\x00-\x7F]|\W', 
                             random.choice(character_pool), pdf.stem
                             )
-                
+
                 result = _process_one(
                     pdf, Path('.\\temp') / newname 
                     if 'newname' in locals() 
